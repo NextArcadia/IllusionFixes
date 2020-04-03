@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using BepInEx;
 using BepInEx.Harmony;
 using HarmonyLib;
@@ -19,6 +20,42 @@ namespace IllusionFixes
         private void Awake()
         {
             HarmonyWrapper.PatchAll(typeof(StudioOptimizations));
+        }
+
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(GuideObject), nameof(GuideObject.calcScale), MethodType.Getter)]
+        //private static void calcScalePatch(GuideObject __instance, ref bool __result)
+        //{
+        //    if (__instance.enableScale)
+        //        __result = false;
+        //}
+
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(GuideObject), "LateUpdate")]
+        private static IEnumerable<CodeInstruction> easdasdPatch(IEnumerable<CodeInstruction> instructions)
+        {
+            var target = AccessTools.PropertyGetter(typeof(Transform), nameof(Transform.lossyScale)) ?? throw new ArgumentNullException("AccessTools.Method(typeof(Transform), nameof(Transform.lossyScale))");
+            foreach (var instruction in instructions)
+            {
+                if (instruction.opcode == OpCodes.Callvirt && target.Equals(instruction.operand))
+                {
+                    // bad code, explodes on scale change since localscale becomes a positive feedpack loop
+                    Console.WriteLine("AYAYA hit");
+                    yield return new CodeInstruction(OpCodes.Pop);
+                    instruction.opcode = OpCodes.Call;
+                    instruction.operand = AccessTools.PropertyGetter(typeof(Vector3), nameof(Vector3.one)) ?? throw new Exception("AAAA");
+                }
+
+                yield return instruction;
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GuideObject), nameof(GuideObject.enableScale), MethodType.Getter)]
+        private static void enableScalePatch(GuideObject __instance, ref bool __result)
+        {
+            __result = __instance.enableRot;
         }
 
         #region Fix attaching charas to other charas
